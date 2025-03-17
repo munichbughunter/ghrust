@@ -32,7 +32,7 @@ For local development and testing, you can use a `.env` file to set the required
 2. Edit the `.env` file and add your credentials:
    ```
    GITHUB_TOKEN=your_actual_github_token
-   GITHUB_ENTERPRISE=your_actual_enterprise_slug
+   GITHUB_ENTERPRISE_ID=your_actual_enterprise_slug
    DATADOG_API_KEY=your_actual_datadog_api_key
    DATADOG_API_URL=your_datadog_url
    DATADOG_PREFIX=your_metric_prefix
@@ -43,7 +43,12 @@ For local development and testing, you can use a `.env` file to set the required
    cargo test
    ```
 
-4. For more verbose logging during testing, use:
+4. Run lambda handler integration test:
+   ```bash
+   cargo test -- --nocapture --ignored
+   ```
+
+5. For more verbose logging during testing, use:
    ```bash
    RUST_LOG=debug cargo test
    ```
@@ -59,22 +64,13 @@ cargo lambda build --release
 ## Deploying the Lambda Function
 
 ```bash
-cargo lambda deploy --iam-role <your-lambda-execution-role-arn>
-```
-
-## Setting up the EventBridge Rule
-
-Create an EventBridge rule to trigger the Lambda function daily:
-
-```bash
-aws events put-rule \
-  --name "DailyGitHubCopilotMetricsRule" \
-  --schedule-expression "cron(0 1 * * ? *)" \
-  --state ENABLED
-
-aws events put-targets \
-  --rule "DailyGitHubCopilotMetricsRule" \
-  --targets "Id"="1","Arn"="<your-lambda-function-arn>"
+cargo lambda deploy 
+    --env-var GITHUB_TOKEN=$(cat .env | grep GITHUB_TOKEN | cut -d '=' -f2) 
+    --env-var GITHUB_ENTERPRISE_ID=$(cat .env | grep GITHUB_ENTERPRISE_ID | cut -d '=' -f2) 
+    --env-var DATADOG_API_KEY=$(cat .env | grep DATADOG_API_KEY | cut -d '=' -f2) 
+    --env-var DATADOG_API_URL=$(cat .env | grep DATADOG_API_URL | cut -d '=' -f2) 
+    --env-var DATADOG_PREFIX=$(cat .env | grep DATADOG_PREFIX | cut -d '=' -f2)  
+    ghrust
 ```
 
 ## Metrics Collected
