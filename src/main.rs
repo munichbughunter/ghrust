@@ -4,7 +4,6 @@ mod services;
 
 use anyhow::{anyhow, Result};
 #[cfg(debug_assertions)]
-use dotenv;
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use serde_json::json;
 use services::datadog::DatadogClient;
