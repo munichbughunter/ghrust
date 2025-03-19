@@ -4,7 +4,6 @@ use crate::models::github::{
 };
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, Utc};
-use std::env;
 use tracing::error;
 
 pub fn get_github_metrics(github_token: &str, enterprise_id: &str) -> Result<Vec<CopilotMetrics>> {
@@ -111,8 +110,7 @@ mod tests {
         CopilotMetrics, Editor, Language, Model, Repository,
     };
     use std::cell::RefCell;
-    use std::process::Command;
-    use std::sync::{Arc, Mutex};
+    use std::env;
 
     // Introduce a mock server for tests
     struct MockServer {
