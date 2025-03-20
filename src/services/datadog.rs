@@ -22,6 +22,12 @@ impl DatadogClient {
     }
 
     pub fn send_metrics(&self, metrics: &[CopilotMetrics], namespace: &str) -> Result<()> {
+        // Check if we're in test mode - don't send metrics to Datadog
+        if std::env::var("MOCK_GITHUB_API").is_ok() {
+            info!("Test mode: Skipping sending metrics to Datadog");
+            return Ok(());
+        }
+
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
@@ -34,47 +40,47 @@ impl DatadogClient {
 
         let mut all_series = Vec::new();
 
+        // For each metric date, convert to Datadog series
         for metric in metrics {
             let date = &metric.date;
-            let date_tag = format!("date:{}", date);
-            let source_tag = "source:github-copilot-metrics".to_string();
-            let tags = vec![date_tag, source_tag];
 
-            // Add top-level metrics
-            if let Some(total_active_users) = metric.total_active_users {
-                all_series.push(self.create_series_point(
-                    &format!("{}.total_active_users", namespace),
-                    total_active_users as f64,
-                    timestamp,
-                    tags.clone(),
-                ));
-            }
+            // Add enterprise-wide metrics
+            all_series.push(self.create_series_point(
+                &format!("{}.total_active_users", namespace),
+                metric.total_active_users.unwrap_or(0) as f64,
+                timestamp,
+                vec![
+                    format!("date:{}", date),
+                    "source:github-copilot-metrics".to_string(),
+                ],
+            ));
 
-            if let Some(total_engaged_users) = metric.total_engaged_users {
-                all_series.push(self.create_series_point(
-                    &format!("{}.total_engaged_users", namespace),
-                    total_engaged_users as f64,
-                    timestamp,
-                    tags.clone(),
-                ));
-            }
+            all_series.push(self.create_series_point(
+                &format!("{}.total_engaged_users", namespace),
+                metric.total_engaged_users.unwrap_or(0) as f64,
+                timestamp,
+                vec![
+                    format!("date:{}", date),
+                    "source:github-copilot-metrics".to_string(),
+                ],
+            ));
 
             // Add IDE code completions metrics
-            if let Some(ref ide_code_completions) = metric.copilot_ide_code_completions {
-                let completions_series = self.prepare_ide_code_completions_metrics(
-                    ide_code_completions,
+            if let Some(ref code_completions) = metric.copilot_ide_code_completions {
+                let code_completions_series = self.prepare_ide_code_completions_metrics(
+                    code_completions,
                     namespace,
                     date,
                     timestamp,
                 );
-                all_series.extend(completions_series);
+                all_series.extend(code_completions_series);
             }
 
             // Add IDE chat metrics
             if let Some(ref ide_chat) = metric.copilot_ide_chat {
-                let chat_series =
+                let ide_chat_series =
                     self.prepare_ide_chat_metrics(ide_chat, namespace, date, timestamp);
-                all_series.extend(chat_series);
+                all_series.extend(ide_chat_series);
             }
 
             // Add dotcom chat metrics
