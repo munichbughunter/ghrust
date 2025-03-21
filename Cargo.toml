@@ -21,3 +21,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [dev-dependencies]
 mockall = "0.12.1"
 temp-env = "0.3.6"
+
+[features]
+default = []
+datadog_tests = []

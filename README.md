@@ -1,87 +1,147 @@
 # GitHub Copilot Metrics Lambda
 
-This AWS Lambda function fetches GitHub Copilot usage metrics for an enterprise and sends specific metrics to Datadog. It is triggered by an EventBridge event on a daily schedule.
+A serverless function that retrieves GitHub Copilot metrics and sends them to Datadog for monitoring and analysis.
 
-## Prerequisites
+## Overview
 
-- Rust and Cargo installed
-- [cargo-lambda](https://github.com/cargo-lambda/cargo-lambda) installed
-- AWS CLI configured with appropriate permissions
-- GitHub Enterprise account with access to Copilot metrics
-- Datadog account with API access
+This Lambda function:
+1. Fetches Copilot metrics from a GitHub Enterprise instance
+2. Optionally fetches team-specific Copilot metrics for defined teams
+3. Processes and formats the metrics
+4. Sends the metrics to Datadog with appropriate namespace
+5. Returns status information about the operation
+
+## Project Structure
+
+```
+.
+├── src/
+│   ├── main.rs                      # Main entry point and Lambda handler
+│   ├── processors/                  # Metrics processing logic
+│   │   ├── mod.rs                   # Module definition
+│   │   ├── enterprise.rs            # Enterprise metrics processing
+│   │   └── team.rs                  # Team metrics processing
+│   ├── services/                    # External service integrations
+│   │   ├── datadog/                 # Datadog API integration
+│   │   │   ├── mod.rs               # Module definition
+│   │   │   ├── client.rs            # Datadog client implementation
+│   │   │   └── models.rs            # Datadog metrics models
+│   │   └── github/                  # GitHub API integration
+│   │       ├── mod.rs               # Module definition
+│   │       ├── api.rs               # GitHub API client
+│   │       └── metrics.rs           # Metrics collection functions
+│   └── models/                      # Data models
+│       └── github.rs                # GitHub metrics models
+├── Cargo.toml                       # Project dependencies
+├── .env                             # Environment variables for deployment
+└── README.md                        # Project documentation
+```
 
 ## Environment Variables
 
-The function requires the following environment variables:
+| Name | Required | Description |
+|------|----------|-------------|
+| `GITHUB_TOKEN` | Yes | GitHub personal access token with admin:enterprise permissions |
+| `GITHUB_ENTERPRISE_ID` | Yes | ID of the GitHub Enterprise organization |
+| `GITHUB_TEAM_SLUGS` | No | Comma-separated list of team slugs for team metrics |
+| `DATADOG_API_KEY` | Yes | Datadog API key |
+| `DATADOG_METRIC_NAMESPACE` | No | Namespace prefix for Datadog metrics (default: github.copilot) |
+| `SKIP_ENTERPRISE_METRICS` | No | If set to any value, skips processing enterprise-wide metrics |
+| `MOCK_GITHUB_API` | No | If set to any value, uses mock data instead of calling GitHub API |
+| `SKIP_DATADOG_TESTS` | No | If set to any value, skips tests that require Datadog API access |
 
-**ToDO: ADD the new ENV Variable** 
-- `GITHUB_TOKEN`: Your GitHub API token with access to enterprise metrics
-- `GITHUB_ENTERPRISE`: Your GitHub Enterprise slug/ID
-- `DATADOG_API_KEY`: Your Datadog API key
-- `DATADOG_API_URL`: Your Datadog API URL
-- `DATADOG_PREFIX`: Prefix for metric names (defaults to "github_copilot" if not set)
+## Testing
 
-## Local Development and Testing
-
-For local development and testing, you can use a `.env` file to set the required environment variables:
-
-1. Copy the `.env.example` file to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Edit the `.env` file and add your credentials:
-   ```
-   GITHUB_TOKEN=your_actual_github_token
-   GITHUB_ENTERPRISE_ID=your_actual_enterprise_slug
-   DATADOG_API_KEY=your_actual_datadog_api_key
-   DATADOG_API_URL=your_datadog_url
-   DATADOG_PREFIX=your_metric_prefix
-   ```
-
-3. Run the tests:
-   ```bash
-   cargo test
-   ```
-
-4. Run lambda handler integration test:
-   ```bash
-   cargo test -- --nocapture --ignored
-   ```
-
-5. For more verbose logging during testing, use:
-   ```bash
-   RUST_LOG=debug cargo test
-   ```
-
-Note: The `.env` file is only used for local development and testing. In production, environment variables should be set in the Lambda function configuration.
-
-## Building the Lambda Function
+The project includes comprehensive test coverage. To run the tests:
 
 ```bash
-cargo lambda build --release
+# Run all tests
+cargo test
+
+# Skip tests that require Datadog API access
+SKIP_DATADOG_TESTS=1 cargo test
+
+# Run ignored tests (tests marked with #[ignore])
+cargo test -- --ignored
 ```
 
-## Deploying the Lambda Function
+Some tests require API access to GitHub or Datadog and are skipped by default. To run these tests, you need to:
+1. Set up the required environment variables
+2. Remove the `SKIP_DATADOG_TESTS` environment variable
+
+## Building and Deployment
+
+### Prerequisites
+
+- Rust toolchain
+- AWS CLI configured with appropriate permissions
+- cargo-lambda (install with `cargo install cargo-lambda`)
+
+### Building
+
+To build the project:
 
 ```bash
-cargo lambda deploy 
-    --env-var GITHUB_TOKEN=$(cat .env | grep GITHUB_TOKEN | cut -d '=' -f2) 
-    --env-var GITHUB_ENTERPRISE_ID=$(cat .env | grep GITHUB_ENTERPRISE_ID | cut -d '=' -f2) 
-    --env-var DATADOG_API_KEY=$(cat .env | grep DATADOG_API_KEY | cut -d '=' -f2) 
-    --env-var DATADOG_API_URL=$(cat .env | grep DATADOG_API_URL | cut -d '=' -f2) 
-    --env-var DATADOG_PREFIX=$(cat .env | grep DATADOG_PREFIX | cut -d '=' -f2)  
-    ghrust
+# Build in debug mode
+cargo build
+
+# Build in release mode (optimized for production)
+cargo build --release
 ```
+
+The compiled binary will be available in `target/debug/` or `target/release/` directory, depending on the build mode.
+
+### Deployment
+
+To deploy the application to AWS Lambda:
+
+```bash
+# Deploy to AWS Lambda using cargo-lambda
+cargo lambda deploy --env-file .env ghrust
+```
+
+This command:
+- Builds the project in release mode
+- Packages it for AWS Lambda (with correct runtime)
+- Deploys it to Lambda as a function named 'ghrust'
+- Configures environment variables from the .env file
+
+Make sure your .env file contains all the required environment variables listed above.
+
+## Data Flow
+
+1. The Lambda function is triggered (e.g., by a scheduled event)
+2. Enterprise-wide metrics are fetched from GitHub API (unless skipped)
+3. If team slugs are configured, team-specific metrics are fetched
+4. Metrics are processed and formatted
+5. Metrics are sent to Datadog with appropriate namespace
+6. Function returns a status response
 
 ## Metrics Collected
 
-The function collects and sends the following metrics to Datadog:
+The function collects the following metrics from GitHub and sends them to Datadog:
 
-- `{prefix}.active_users`: Total number of active GitHub Copilot users
-- `{prefix}.engaged_users`: Total number of engaged GitHub Copilot users
+### Enterprise Metrics
+- Total active users
+- Total engaged users
+- IDE code completions (total and by language)
+- IDE chat metrics
+- Dotcom chat metrics
+- Dotcom pull request metrics
 
-Where `{prefix}` is the value of the `DATADOG_PREFIX` environment variable.
+### Team Metrics
+- Same metrics as enterprise, but scoped to specific teams
+- Team metrics are sent with the namespace: `{base_namespace}.team.{team_slug}`
+
+## Architecture
+
+### Datadog Service
+The Datadog service is modularized into:
+- `client.rs`: Implements the `DatadogClient` for sending metrics to Datadog
+- `models.rs`: Contains data structures for representing metrics
+- `mod.rs`: Exports the public interface
+
+This modular design improves code organization and maintainability.
 
 ## License
 

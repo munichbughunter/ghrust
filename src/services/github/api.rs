@@ -1,9 +1,6 @@
-use crate::models::github::{
-    CopilotDotcomChat, CopilotIdeChat, CopilotIdeCodeCompletions, CopilotMetrics, Language,
-};
+use crate::models::github::CopilotMetrics;
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Duration, Utc};
-use tracing::error;
+use tracing::{debug, error, info};
 
 /// A client for interacting with the GitHub API
 #[derive(Clone)]
@@ -18,229 +15,148 @@ impl GitHubClient {
             token: token.to_string(),
         }
     }
-}
 
-/// Fetches GitHub Copilot metrics for the entire enterprise
-///
-/// This function queries the GitHub API endpoint for enterprise-wide Copilot metrics
-/// and returns the results as a vector of CopilotMetrics.
-pub fn get_github_metrics(
-    client: &GitHubClient,
-    enterprise_id: &str,
-) -> Result<Vec<CopilotMetrics>> {
-    // Calculate yesterday's date in ISO 8601 format
-    let now: DateTime<Utc> = Utc::now();
-    let yesterday = now - Duration::days(1);
-    let since_date = yesterday.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    /// Fetches enterprise-wide Copilot metrics from the GitHub API
+    pub fn fetch_enterprise_metrics(
+        &self,
+        enterprise_id: &str,
+        since_date: &str,
+    ) -> Result<Vec<CopilotMetrics>> {
+        let url = format!(
+            "https://api.github.com/enterprises/{}/copilot/metrics",
+            enterprise_id
+        );
 
-    let url = format!(
-        "https://api.github.com/enterprises/{}/copilot/metrics",
-        enterprise_id
-    );
-
-    println!("Making enterprise metrics request to URL: {}", url);
-    println!("Using since_date: {}", since_date);
-
-    // Set a timeout for the API request
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(5))
-        .timeout_read(std::time::Duration::from_secs(30))
-        .build();
-
-    println!("Created HTTP agent with timeouts for enterprise request");
-
-    let response = agent
-        .get(&url)
-        .query("since", &since_date)
-        .set("Accept", "application/vnd.github+json")
-        .set("Authorization", &format!("Bearer {}", client.token))
-        .set("X-GitHub-Api-Version", "2022-11-28")
-        .call();
-
-    match response {
-        Ok(response) => {
-            let response_text = response.into_string()?;
-            println!("\nResponse Body:");
-            println!("{}", response_text);
-            println!("=======================\n");
-
-            // Parse the text into JSON
-            let metrics: Vec<CopilotMetrics> = match serde_json::from_str(&response_text) {
-                Ok(metrics) => {
-                    println!("\n=== Metrics for Datadog ===");
-                    for metric in &metrics {
-                        let metric: &CopilotMetrics = metric;
-                        println!("Date: {}", metric.date);
-                        if let Some(active) = metric.total_active_users {
-                            println!("Total Active Users: {}", active);
-                        }
-                        if let Some(engaged) = metric.total_engaged_users {
-                            println!("Total Engaged Users: {}", engaged);
-                        }
-                        if let Some(ref completions) = metric.copilot_ide_code_completions {
-                            let completions: &CopilotIdeCodeCompletions = completions;
-                            println!(
-                                "IDE Code Completions Engaged Users: {}",
-                                completions.total_engaged_users
-                            );
-
-                            if let Some(ref languages) = completions.languages {
-                                println!("\nLanguage Breakdown:");
-                                for lang in languages {
-                                    let lang: &Language = lang;
-                                    println!(
-                                        "  {} - {} users",
-                                        lang.name, lang.total_engaged_users
-                                    );
-                                }
-                            }
-                        }
-                        if let Some(ref chat) = metric.copilot_ide_chat {
-                            let chat: &CopilotIdeChat = chat;
-                            println!("IDE Chat Engaged Users: {}", chat.total_engaged_users);
-                        }
-                        if let Some(ref chat) = metric.copilot_dotcom_chat {
-                            let chat: &CopilotDotcomChat = chat;
-                            println!("Dotcom Chat Engaged Users: {}", chat.total_engaged_users);
-                        }
-                        println!("------------------------");
-                    }
-                    println!("=======================\n");
-                    metrics
-                }
-                Err(e) => {
-                    error!("Failed to parse JSON response: {}", e);
-                    return Err(anyhow!("Failed to read JSON: {}", e));
-                }
-            };
-            Ok(metrics)
-        }
-        Err(ureq::Error::Status(403, _)) => {
-            Err(anyhow!("Forbidden: Not authorized to access this resource"))
-        }
-        Err(ureq::Error::Status(404, _)) => {
-            Err(anyhow!("Not Found: The requested resource does not exist"))
-        }
-        Err(ureq::Error::Status(422, _)) => Err(anyhow!(
-            "Unprocessable Entity: Copilot Usage Metrics API setting is disabled"
-        )),
-        Err(ureq::Error::Status(status, response)) => {
-            if let Ok(response_text) = response.into_string() {
-                error!("Error response from GitHub API: {}", response_text);
-            }
-            Err(anyhow!("Error: Received status code: {}", status))
-        }
-        Err(e) => {
-            if let ureq::Error::Status(status, _response) = &e {
-                println!("HTTP Status: {}", status);
-                println!("Cannot show response body due to borrowing limitations");
-            }
-            Err(anyhow!("Error fetching GitHub metrics: {}", e))
-        }
-    }
-}
-
-/// Fetches GitHub Copilot metrics for a specific team
-///
-/// This function queries the GitHub API endpoint for team-specific Copilot metrics
-/// and returns the results as a vector of CopilotMetrics.
-pub fn get_github_team_metrics(
-    client: &GitHubClient,
-    enterprise_id: &str,
-    team_slug: &str,
-) -> Result<Vec<CopilotMetrics>> {
-    println!("\n==== TEAM METRICS API CALL STARTED ====");
-    println!("Team slug: '{}'", team_slug);
-    println!("Enterprise ID: '{}'", enterprise_id);
-
-    // Check if team_slug is empty
-    if team_slug.trim().is_empty() {
-        println!("WARNING: Team slug is empty or whitespace only!");
-        return Err(anyhow!("Team slug is empty or whitespace only"));
+        info!("Fetching enterprise metrics for {}", enterprise_id);
+        self.fetch_metrics(&url, since_date, "enterprise")
     }
 
-    // Calculate yesterday's date in ISO 8601 format
-    let now: DateTime<Utc> = Utc::now();
-    let yesterday = now - Duration::days(1);
-    let since_date = yesterday.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    /// Fetches team-specific Copilot metrics from the GitHub API
+    pub fn fetch_team_metrics(
+        &self,
+        enterprise_id: &str,
+        team_slug: &str,
+        since_date: &str,
+    ) -> Result<Vec<CopilotMetrics>> {
+        let url = format!(
+            "https://api.github.com/enterprises/{}/team/{}/copilot/metrics",
+            enterprise_id, team_slug
+        );
 
-    let url = format!(
-        "https://api.github.com/enterprises/{}/team/{}/copilot/metrics",
-        enterprise_id, team_slug
-    );
+        info!("Fetching team metrics for {}/{}", enterprise_id, team_slug);
+        self.fetch_metrics(&url, since_date, "team")
+    }
 
-    println!("Making team metrics request to URL: {}", url);
-    println!("Using since_date: {}", since_date);
-    println!(
-        "Auth token (first 5 chars): {}",
-        client.token.chars().take(5).collect::<String>()
-    );
+    // Core fetch metrics function used by both enterprise and team fetching
+    fn fetch_metrics(
+        &self,
+        url: &str,
+        since_date: &str,
+        context: &str,
+    ) -> Result<Vec<CopilotMetrics>> {
+        debug!("Requesting {} metrics from URL: {}", context, url);
 
-    // Set a timeout for the API request
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(5))
-        .timeout_read(std::time::Duration::from_secs(30))
-        .build();
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(std::time::Duration::from_secs(5))
+            .timeout_read(std::time::Duration::from_secs(30))
+            .build();
 
-    println!("Created HTTP agent with timeouts");
+        let response = match agent
+            .get(url)
+            .query("since", since_date)
+            .set("Accept", "application/vnd.github+json")
+            .set("Authorization", &format!("Bearer {}", self.token))
+            .set("X-GitHub-Api-Version", "2022-11-28")
+            .call()
+        {
+            Ok(resp) => resp.into_string()?,
+            Err(e) => return self.handle_api_error(e),
+        };
 
-    println!("About to make API call for team metrics");
-    let response = agent
-        .get(&url)
-        .query("since", &since_date)
-        .set("Accept", "application/vnd.github+json")
-        .set("Authorization", &format!("Bearer {}", client.token))
-        .set("X-GitHub-Api-Version", "2022-11-28")
-        .call();
+        debug!("Received API response ({} bytes)", response.len());
 
-    println!("API call for team metrics completed");
-
-    match response {
-        Ok(response) => {
-            let response_text = response.into_string()?;
-            println!("\nTeam {} Response Body:", team_slug);
-            println!("{}", response_text);
-            println!("=======================\n");
-
-            // Parse the text into JSON
-            let metrics: Vec<CopilotMetrics> = match serde_json::from_str(&response_text) {
-                Ok(metrics) => {
-                    println!("\n=== Team {} Metrics for Datadog ===", team_slug);
-                    for metric in &metrics {
-                        let metric: &CopilotMetrics = metric;
-                        println!("Date: {}", metric.date);
-                        if let Some(active) = metric.total_active_users {
-                            println!("Total Active Users: {}", active);
-                        }
-                        if let Some(engaged) = metric.total_engaged_users {
-                            println!("Total Engaged Users: {}", engaged);
-                        }
-                        println!("------------------------");
-                    }
-                    println!("=======================\n");
-                    metrics
+        match serde_json::from_str::<Vec<CopilotMetrics>>(&response) {
+            Ok(metrics) => {
+                if metrics.is_empty() {
+                    info!("No metrics data available");
+                } else {
+                    info!("Received {} data points", metrics.len());
+                    self.log_metrics_summary(&metrics);
                 }
-                Err(e) => {
-                    error!(
-                        "Failed to parse JSON response for team {}: {}",
-                        team_slug, e
-                    );
-                    return Err(anyhow!("Failed to read JSON for team {}: {}", team_slug, e));
-                }
-            };
-            Ok(metrics)
-        }
-        Err(e) => {
-            let error_message = format!("Error fetching team metrics for {}: {}", team_slug, e);
-            println!("{}", error_message);
-            error!("{}", error_message);
-
-            if let ureq::Error::Status(status, _response) = &e {
-                println!("HTTP Status: {}", status);
-                println!("Cannot show response body due to borrowing limitations");
+                Ok(metrics)
             }
+            Err(e) => Err(anyhow!("Error parsing GitHub {} metrics: {}", context, e)),
+        }
+    }
 
-            Err(anyhow!("Failed to fetch team metrics: {}", e))
+    // Helper function to handle API errors
+    fn handle_api_error(&self, e: ureq::Error) -> Result<Vec<CopilotMetrics>> {
+        match e {
+            ureq::Error::Status(status, response) => {
+                let body = response
+                    .into_string()
+                    .unwrap_or_else(|_| "Could not read response body".to_string());
+                error!("HTTP error {}: {}", status, body);
+
+                let err_msg = match status {
+                    401 => "Authentication error: Invalid GitHub token",
+                    403 => "Authorization error: Insufficient permissions",
+                    404 => "Not found: Resource does not exist",
+                    422 => "Validation error: Unprocessable entity",
+                    429 => "Rate limit exceeded: Try again later",
+                    _ => "GitHub API error",
+                };
+                Err(anyhow!("{}: {}", err_msg, body))
+            }
+            ureq::Error::Transport(transport) => {
+                error!("Transport error: {}", transport);
+                Err(anyhow!("Network error: {}", transport))
+            }
+        }
+    }
+
+    // Helper function to log metrics summary
+    fn log_metrics_summary(&self, metrics: &[CopilotMetrics]) {
+        for metric in metrics {
+            debug!(
+                "Date: {}, Active: {:?}, Engaged: {:?}",
+                metric.date, metric.total_active_users, metric.total_engaged_users
+            );
+
+            // Log feature-specific metrics using iter + for_each for conciseness
+            [
+                (
+                    "IDE Code",
+                    metric
+                        .copilot_ide_code_completions
+                        .as_ref()
+                        .map(|c| c.total_engaged_users),
+                ),
+                (
+                    "IDE Chat",
+                    metric
+                        .copilot_ide_chat
+                        .as_ref()
+                        .map(|c| c.total_engaged_users),
+                ),
+                (
+                    "Dotcom Chat",
+                    metric
+                        .copilot_dotcom_chat
+                        .as_ref()
+                        .map(|c| c.total_engaged_users),
+                ),
+                (
+                    "Dotcom PR",
+                    metric
+                        .copilot_dotcom_pull_requests
+                        .as_ref()
+                        .map(|c| c.total_engaged_users),
+                ),
+            ]
+            .iter()
+            .filter_map(|(name, users)| users.map(|u| (name, u)))
+            .for_each(|(name, users)| debug!("{} Engaged Users: {}", name, users));
         }
     }
 }
