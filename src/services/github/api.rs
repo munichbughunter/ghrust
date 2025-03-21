@@ -38,7 +38,19 @@ pub fn get_github_metrics(
         enterprise_id
     );
 
-    let response = ureq::get(&url)
+    println!("Making enterprise metrics request to URL: {}", url);
+    println!("Using since_date: {}", since_date);
+
+    // Set a timeout for the API request
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(5))
+        .timeout_read(std::time::Duration::from_secs(30))
+        .build();
+
+    println!("Created HTTP agent with timeouts for enterprise request");
+
+    let response = agent
+        .get(&url)
         .query("since", &since_date)
         .set("Accept", "application/vnd.github+json")
         .set("Authorization", &format!("Bearer {}", client.token))
@@ -118,7 +130,13 @@ pub fn get_github_metrics(
             }
             Err(anyhow!("Error: Received status code: {}", status))
         }
-        Err(e) => Err(anyhow!("Error fetching GitHub metrics: {}", e)),
+        Err(e) => {
+            if let ureq::Error::Status(status, _response) = &e {
+                println!("HTTP Status: {}", status);
+                println!("Cannot show response body due to borrowing limitations");
+            }
+            Err(anyhow!("Error fetching GitHub metrics: {}", e))
+        }
     }
 }
 
@@ -131,6 +149,16 @@ pub fn get_github_team_metrics(
     enterprise_id: &str,
     team_slug: &str,
 ) -> Result<Vec<CopilotMetrics>> {
+    println!("\n==== TEAM METRICS API CALL STARTED ====");
+    println!("Team slug: '{}'", team_slug);
+    println!("Enterprise ID: '{}'", enterprise_id);
+
+    // Check if team_slug is empty
+    if team_slug.trim().is_empty() {
+        println!("WARNING: Team slug is empty or whitespace only!");
+        return Err(anyhow!("Team slug is empty or whitespace only"));
+    }
+
     // Calculate yesterday's date in ISO 8601 format
     let now: DateTime<Utc> = Utc::now();
     let yesterday = now - Duration::days(1);
@@ -141,12 +169,31 @@ pub fn get_github_team_metrics(
         enterprise_id, team_slug
     );
 
-    let response = ureq::get(&url)
+    println!("Making team metrics request to URL: {}", url);
+    println!("Using since_date: {}", since_date);
+    println!(
+        "Auth token (first 5 chars): {}",
+        client.token.chars().take(5).collect::<String>()
+    );
+
+    // Set a timeout for the API request
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(5))
+        .timeout_read(std::time::Duration::from_secs(30))
+        .build();
+
+    println!("Created HTTP agent with timeouts");
+
+    println!("About to make API call for team metrics");
+    let response = agent
+        .get(&url)
         .query("since", &since_date)
         .set("Accept", "application/vnd.github+json")
         .set("Authorization", &format!("Bearer {}", client.token))
         .set("X-GitHub-Api-Version", "2022-11-28")
         .call();
+
+    println!("API call for team metrics completed");
 
     match response {
         Ok(response) => {
@@ -183,35 +230,17 @@ pub fn get_github_team_metrics(
             };
             Ok(metrics)
         }
-        Err(ureq::Error::Status(403, _)) => Err(anyhow!(
-            "Forbidden: Not authorized to access team {} resource",
-            team_slug
-        )),
-        Err(ureq::Error::Status(404, _)) => Err(anyhow!(
-            "Not Found: The requested team {} resource does not exist",
-            team_slug
-        )),
-        Err(ureq::Error::Status(422, _)) => Err(anyhow!(
-            "Unprocessable Entity: Copilot Usage Metrics API setting is disabled for team {}",
-            team_slug
-        )),
-        Err(ureq::Error::Status(status, response)) => {
-            if let Ok(response_text) = response.into_string() {
-                error!(
-                    "Error response from GitHub API for team {}: {}",
-                    team_slug, response_text
-                );
+        Err(e) => {
+            let error_message = format!("Error fetching team metrics for {}: {}", team_slug, e);
+            println!("{}", error_message);
+            error!("{}", error_message);
+
+            if let ureq::Error::Status(status, _response) = &e {
+                println!("HTTP Status: {}", status);
+                println!("Cannot show response body due to borrowing limitations");
             }
-            Err(anyhow!(
-                "Error: Received status code {} for team {}",
-                status,
-                team_slug
-            ))
+
+            Err(anyhow!("Failed to fetch team metrics: {}", e))
         }
-        Err(e) => Err(anyhow!(
-            "Error fetching GitHub metrics for team {}: {}",
-            team_slug,
-            e
-        )),
     }
 }

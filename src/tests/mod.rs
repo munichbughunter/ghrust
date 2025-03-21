@@ -20,7 +20,7 @@ mod tests {
         std::env::remove_var("GITHUB_ENTERPRISE_ID");
         std::env::remove_var("DATADOG_API_KEY");
         std::env::remove_var("DATADOG_PREFIX");
-        std::env::remove_var("GITHUB_TEAMS");
+        std::env::remove_var("GITHUB_TEAM_SLUGS");
         std::env::remove_var("MOCK_GITHUB_API");
     }
 
@@ -37,7 +37,7 @@ mod tests {
     async fn test_function_handler_mock() {
         cleanup_env_vars();
         setup_test_env_vars();
-        std::env::set_var("GITHUB_TEAMS", "team1,team2");
+        std::env::set_var("GITHUB_TEAMS_SLUGS", "team1,team2");
         setup_mocks();
 
         // Create a fake event

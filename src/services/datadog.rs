@@ -21,7 +21,14 @@ impl DatadogClient {
         Self { api_key, api_url }
     }
 
+    /// Sends metrics to Datadog
     pub fn send_metrics(&self, metrics: &[CopilotMetrics], namespace: &str) -> Result<()> {
+        println!(
+            "Starting send_metrics to Datadog: {} data points for namespace {}",
+            metrics.len(),
+            namespace
+        );
+
         // Check if we're in test mode - don't send metrics to Datadog
         if std::env::var("MOCK_GITHUB_API").is_ok() {
             info!("Test mode: Skipping sending metrics to Datadog");
@@ -98,40 +105,62 @@ impl DatadogClient {
             }
         }
 
+        println!("Prepared {} series for Datadog", all_series.len());
+
         // Send metrics in chunks to avoid oversized requests
-        for chunk in all_series.chunks(100) {
+        for (i, chunk) in all_series.chunks(100).enumerate() {
+            println!(
+                "Sending chunk {} of {} series to Datadog",
+                i + 1,
+                chunk.len()
+            );
             self.send_metrics_chunk(chunk)?;
+            println!("Successfully sent chunk {} to Datadog", i + 1);
         }
 
+        println!("IMPORTANT: Completed all Datadog API calls successfully - AFTER THIS MESSAGE, PROGRAM SHOULD CONTINUE TO TEAM METRICS");
         info!("Successfully sent all metrics to Datadog EU API");
+
+        // Check if this is the enterprise metrics call (can tell by namespace structure)
+        if !namespace.contains(".team.") {
+            // This is the enterprise metrics call
+            println!("ENTERPRISE METRICS CALL: Next should be team metrics. If you don't see team metrics logs, there's an issue");
+        } else {
+            // This is a team metrics call
+            println!(
+                "TEAM METRICS CALL for team: {}",
+                namespace.split(".team.").last().unwrap_or("unknown")
+            );
+        }
+
         Ok(())
     }
 
+    /// Sends a chunk of metrics to Datadog
     fn send_metrics_chunk(&self, series: &[Value]) -> Result<()> {
-        let payload = json!({
-            "series": series
-        });
+        println!("In send_metrics_chunk with {} series", series.len());
 
-        let response = ureq::post(&self.api_url)
-            .set("DD-API-KEY", &self.api_key)
+        // Build the final request body
+        let request_body = json!({ "series": series });
+
+        println!("About to send request to Datadog API URL: {}", self.api_url);
+
+        // Send the request
+        match ureq::post(&self.api_url)
             .set("Content-Type", "application/json")
-            .send_json(payload);
-
-        match response {
-            Ok(_) => Ok(()),
-            Err(ureq::Error::Status(code, response)) => {
-                let error_body = response
-                    .into_string()
-                    .unwrap_or_else(|_| "Unable to read error body".to_string());
-                error!(
-                    "Error sending metrics to Datadog API: HTTP {}: {}",
-                    code, error_body
-                );
-                Err(anyhow!("Datadog API error: HTTP {}: {}", code, error_body))
+            .set("DD-API-KEY", &self.api_key)
+            .send_json(request_body)
+        {
+            Ok(_) => {
+                println!("Successfully sent chunk to Datadog API");
+                Ok(())
             }
-            Err(err) => {
-                error!("Error sending metrics to Datadog API: {}", err);
-                Err(anyhow!("Failed to send metrics to Datadog: {}", err))
+            Err(e) => {
+                println!("Error sending metrics chunk to Datadog: {:?}", e);
+                Err(anyhow!(
+                    "Failed to send metrics to Datadog API: {}",
+                    e.to_string()
+                ))
             }
         }
     }

@@ -14,6 +14,7 @@ This AWS Lambda function fetches GitHub Copilot usage metrics for an enterprise 
 
 The function requires the following environment variables:
 
+**ToDO: ADD the new ENV Variable** 
 - `GITHUB_TOKEN`: Your GitHub API token with access to enterprise metrics
 - `GITHUB_ENTERPRISE`: Your GitHub Enterprise slug/ID
 - `DATADOG_API_KEY`: Your Datadog API key
