@@ -14,12 +14,12 @@
 //! The primary entry point is the `send_metrics` method, which takes a collection
 //! of GitHub Copilot metrics and sends them to Datadog with appropriate formatting.
 
+use super::error::{DatadogError, Result};
 use super::models::{standard_tags, MetricPoint, MetricSeries};
 use crate::models::github::{
     CopilotDotcomChat, CopilotDotcomPullRequests, CopilotIdeChat, CopilotIdeCodeCompletions,
     CopilotMetrics,
 };
-use anyhow::{anyhow, Result};
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::info;
@@ -144,7 +144,7 @@ impl DatadogClient {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
-            .map_err(|e| anyhow!("Time error: {}", e))
+            .map_err(|e| DatadogError::TimeError(e.to_string()))
     }
 
     /// Prepares all metrics to be sent to Datadog
@@ -268,7 +268,17 @@ impl DatadogClient {
             .send_json(request_body)
         {
             Ok(_) => Ok(()),
-            Err(e) => Err(anyhow!("Failed to send metrics to Datadog: {}", e)),
+            Err(e) => match e {
+                ureq::Error::Status(status, response) => {
+                    let body = response
+                        .into_string()
+                        .unwrap_or_else(|_| "Could not read response body".to_string());
+                    Err(DatadogError::HttpError(status, body))
+                }
+                ureq::Error::Transport(transport) => {
+                    Err(DatadogError::Network(transport.to_string()))
+                }
+            },
         }
     }
 

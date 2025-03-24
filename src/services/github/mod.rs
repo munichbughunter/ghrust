@@ -1,13 +1,20 @@
-//! # GitHub API Services
+//! # GitHub API Service
 //!
-//! This module provides services for interacting with GitHub's API,
-//! specifically for retrieving Copilot metrics.
+//! This module provides client and utilities for interacting with GitHub's API,
+//! especially for fetching Copilot metrics data.
 //!
-//! ## Submodules
-//! - `api`: Contains the GitHub API client for making HTTP requests
-//! - `metrics`: Functions for processing raw API responses into metric objects
+//! ## Core Components
+//!
+//! * `api` - The main GitHub API client for fetching metrics
+//! * `error` - Structured error types for GitHub API operations
+//!
+//! ## Usage
+//!
+//! The main entry point is the `GitHubClient` which handles authentication and
+//! request formation when interacting with GitHub's API.
 
 pub mod api;
+mod error;
 mod metrics;
 
 #[cfg(test)]

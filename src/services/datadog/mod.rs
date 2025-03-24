@@ -1,15 +1,22 @@
-//! # Datadog API Services
+//! # Datadog Monitoring Service
 //!
-//! This module provides services for sending metrics to Datadog.
-//! It includes a client for making API requests and models for representing
-//! metrics in Datadog's format.
+//! This module provides client and utilities for sending metrics to Datadog's
+//! monitoring service, with a focus on GitHub Copilot usage metrics.
 //!
-//! ## Submodules
-//! - `client`: Contains the Datadog API client
-//! - `models`: Data structures for Datadog metrics
+//! ## Core Components
+//!
+//! * `client` - The main Datadog API client for sending metrics
+//! * `models` - Data structures for representing Datadog metrics
+//! * `error` - Structured error types for Datadog operations
+//!
+//! ## Usage
+//!
+//! The main entry point is the `DatadogClient` which handles authentication,
+//! metric formatting, and transmission to Datadog's API.
 
-mod client;
+pub mod client;
+mod error;
 mod models;
 
-// Re-export the client for convenience
 pub use client::DatadogClient;
+// pub use error::{DatadogError, Result as DatadogResult};

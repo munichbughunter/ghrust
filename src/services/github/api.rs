@@ -12,8 +12,8 @@
 //! The client uses the `ureq` library for making HTTP requests and handles JSON
 //! serialization/deserialization of the GitHub API responses.
 
+use super::error::{GitHubError, Result};
 use crate::models::github::CopilotMetrics;
-use anyhow::{anyhow, Result};
 use tracing::{debug, error, info};
 
 /// Client for interacting with the GitHub API
@@ -171,7 +171,15 @@ impl GitHubClient {
             .set("X-GitHub-Api-Version", "2022-11-28")
             .call()
         {
-            Ok(resp) => resp.into_string()?,
+            Ok(resp) => match resp.into_string() {
+                Ok(body) => body,
+                Err(e) => {
+                    return Err(GitHubError::Network(format!(
+                        "Failed to read response: {}",
+                        e
+                    )))
+                }
+            },
             Err(e) => return self.handle_api_error(e),
         };
 
@@ -187,7 +195,7 @@ impl GitHubClient {
                 }
                 Ok(metrics)
             }
-            Err(e) => Err(anyhow!("Error parsing GitHub {} metrics: {}", context, e)),
+            Err(e) => Err(GitHubError::ParseError(context.to_string(), e.to_string())),
         }
     }
 
@@ -207,7 +215,7 @@ impl GitHubClient {
     ///
     /// # Error Handling
     ///
-    /// Different HTTP status codes are translated into specific error messages:
+    /// Different HTTP status codes are translated into specific error types:
     /// - 401: Authentication errors (invalid token)
     /// - 403: Authorization errors (insufficient permissions)
     /// - 404: Resource not found
@@ -221,19 +229,18 @@ impl GitHubClient {
                     .unwrap_or_else(|_| "Could not read response body".to_string());
                 error!("HTTP error {}: {}", status, body);
 
-                let err_msg = match status {
-                    401 => "Authentication error: Invalid GitHub token",
-                    403 => "Authorization error: Insufficient permissions",
-                    404 => "Not found: Resource does not exist",
-                    422 => "Validation error: Unprocessable entity",
-                    429 => "Rate limit exceeded: Try again later",
-                    _ => "GitHub API error",
-                };
-                Err(anyhow!("{}: {}", err_msg, body))
+                match status {
+                    401 => Err(GitHubError::Authentication(body)),
+                    403 => Err(GitHubError::Authorization(body)),
+                    404 => Err(GitHubError::NotFound(body)),
+                    422 => Err(GitHubError::Validation(body)),
+                    429 => Err(GitHubError::RateLimit(body)),
+                    _ => Err(GitHubError::HttpError(status, body)),
+                }
             }
             ureq::Error::Transport(transport) => {
                 error!("Transport error: {}", transport);
-                Err(anyhow!("Network error: {}", transport))
+                Err(GitHubError::Network(transport.to_string()))
             }
         }
     }
