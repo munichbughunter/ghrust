@@ -1,10 +1,35 @@
+//! # GitHub Services Tests
+//!
+//! This module contains tests for the GitHub API services and metrics processing functionality.
+//! It includes unit tests using mock data as well as integration tests that can connect to the
+//! real GitHub API (marked with #[ignore] to prevent them from running in normal test runs).
+//!
+//! The tests verify:
+//! - Creation and validation of mock metrics data
+//! - Enterprise-wide metrics processing
+//! - Team-specific metrics processing
+//! - IDE chat metrics calculation
+//! - API response handling
+//!
+//! Some tests require environment variables for real API access, while others
+//! use mock data to enable testing without external dependencies.
+
 use super::test_helpers::{
     create_chat_metrics, create_mock_api_response, create_test_metrics, create_test_team_metrics,
 };
 use crate::models::github::CopilotMetrics;
 use crate::services::github::{get_enterprise_metrics, get_team_metrics};
 
-// Core test for mock metrics functionality
+/// Core test for mock metrics functionality
+///
+/// Verifies that the mock metrics generation functions produce metrics objects
+/// with the expected values. This is a fundamental test that ensures our test
+/// fixtures are working correctly, since many other tests rely on these mocks.
+///
+/// Specifically, this test checks:
+/// - The date is set correctly
+/// - The total active users value is as expected
+/// - The IDE code completions engaged users count is correct
 #[test]
 fn test_mock_metrics() {
     let metrics = create_test_metrics();
@@ -20,7 +45,16 @@ fn test_mock_metrics() {
     );
 }
 
-// Test enterprise metrics with mocks
+/// Test enterprise metrics with mocks
+///
+/// Tests the structure and content of enterprise-level metrics using mock data.
+/// This verifies that enterprise metrics objects contain the expected fields and values,
+/// particularly focusing on language-specific data within the IDE code completions.
+///
+/// This test ensures that:
+/// - The top-level active and engaged user counts are correct
+/// - The language data within IDE code completions exists
+/// - The Rust language metrics have the expected values
 #[test]
 fn test_enterprise_metrics_mock() {
     let metrics = create_test_metrics();
@@ -43,7 +77,16 @@ fn test_enterprise_metrics_mock() {
     }
 }
 
-// Test team metrics with mocks
+/// Test team metrics with mocks
+///
+/// Tests the structure and content of team-level metrics using mock data.
+/// This ensures that the team metrics objects contain the expected fields and values,
+/// with appropriately scaled numbers compared to enterprise metrics.
+///
+/// Specifically checks:
+/// - The date is set correctly
+/// - The active and engaged user counts are at team-appropriate scale
+/// - The IDE code completions engaged users count is correct for team level
 #[test]
 fn test_team_metrics_mock() {
     let metrics = create_test_team_metrics();
@@ -60,14 +103,31 @@ fn test_team_metrics_mock() {
     );
 }
 
-// Integration tests that require real credentials - always ignored by default
-
+/// Integration test for Lambda handler functionality
+///
+/// This test would verify the end-to-end Lambda function execution.
+/// It is marked with #[ignore] so it doesn't run during normal test execution,
+/// as it would require actual AWS Lambda runtime components.
+///
+/// To run this test: `cargo test test_lambda_handler_integration -- --ignored`
 #[test]
 #[ignore]
 fn test_lambda_handler_integration() {
     println!("Integration test would go here");
 }
 
+/// Direct GitHub API integration test
+///
+/// Tests the direct connection to the GitHub API to fetch enterprise metrics.
+/// This test is marked with #[ignore] because it requires:
+/// 1. Valid GitHub credentials in environment variables
+/// 2. Network access to the GitHub API
+///
+/// Required environment variables:
+/// - GITHUB_TOKEN: A valid GitHub personal access token
+/// - GITHUB_ENTERPRISE_ID: ID of a GitHub enterprise organization
+///
+/// To run this test: `cargo test test_github_api_direct -- --ignored`
 #[test]
 #[ignore]
 fn test_github_api_direct() {
@@ -82,6 +142,19 @@ fn test_github_api_direct() {
     println!("\nAPI Call Result: {:?}", result);
 }
 
+/// Direct GitHub API team metrics integration test
+///
+/// Tests the direct connection to the GitHub API to fetch team-specific metrics.
+/// This test is marked with #[ignore] because it requires:
+/// 1. Valid GitHub credentials in environment variables
+/// 2. Network access to the GitHub API
+/// 3. A valid team slug in the hardcoded variable
+///
+/// Required environment variables:
+/// - GITHUB_TOKEN: A valid GitHub personal access token
+/// - GITHUB_ENTERPRISE_ID: ID of a GitHub enterprise organization
+///
+/// To run this test: `cargo test test_github_team_metrics_direct -- --ignored`
 #[test]
 #[ignore]
 fn test_github_team_metrics_direct() {
@@ -115,7 +188,22 @@ fn test_github_team_metrics_direct() {
     }
 }
 
-// Test for IDE chat metrics calculation
+/// Test for IDE chat metrics calculation
+///
+/// Verifies the calculation of aggregate metrics for IDE chat functionality.
+/// This test uses mock chat metrics data to test metric aggregation logic,
+/// specifically focusing on total chats, chat copies, and chat insertions.
+///
+/// The test can be skipped by setting the SKIP_DATADOG_TESTS environment variable,
+/// which is useful in environments where Datadog dependencies are not available.
+///
+/// This test has two execution modes:
+/// 1. With the "datadog_tests" feature: Tests the actual Datadog metrics preparation
+/// 2. Without the feature: Simply verifies the structure of the mock data
+///
+/// Environment variables:
+/// - SKIP_DATADOG_TESTS: If set, skips this test
+/// - DATADOG_NAMESPACE_P7S1: Set by the test to a test value
 #[test]
 fn test_ide_chat_metrics_calculation() {
     // This test requires access to the Datadog client, which may not be available in all test environments
@@ -197,12 +285,21 @@ fn test_ide_chat_metrics_calculation() {
     }
 }
 
+/// Tests for mock client implementation
+///
+/// This module contains tests that use a mock implementation of the GitHub client
+/// to test functionality without requiring real API access.
 #[cfg(test)]
 mod mock_client_tests {
     use super::*;
     use crate::services::github::GitHubClient;
     use anyhow::Result;
 
+    /// Mock response method extension for GitHubClient
+    ///
+    /// Adds a method to GitHubClient that returns mock API response data
+    /// instead of making real API calls. This is used for testing the client
+    /// without requiring real API access.
     #[cfg(test)]
     impl GitHubClient {
         fn mock_response(&self) -> Result<Vec<CopilotMetrics>> {
@@ -210,6 +307,15 @@ mod mock_client_tests {
         }
     }
 
+    /// Test GitHub API client with mock data
+    ///
+    /// Verifies that the GitHubClient can correctly handle API responses
+    /// by using a mock implementation that returns predefined data.
+    ///
+    /// This test:
+    /// - Creates a client with a fake token (won't be used)
+    /// - Calls the mock_response method to get simulated API data
+    /// - Verifies the structure and values of the returned metrics
     #[test]
     fn test_github_api_with_mock() {
         let client = GitHubClient::new("fake_token");

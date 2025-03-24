@@ -78,14 +78,43 @@ pub struct CopilotDotcomPullRequests {
     pub repositories: Option<Vec<Repository>>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+/// GitHub Data Models
+///
+/// This module defines the data structures that represent GitHub Copilot metrics.
+///
+/// The primary structures include:
+/// - `CopilotMetrics`: The top-level container for all metrics
+/// - `CopilotIdeCodeCompletions`: Metrics for IDE code completions
+/// - `CopilotIdeChat`: Metrics for IDE chat interactions
+/// - `CopilotDotcomChat`: Metrics for GitHub.com chat interactions
+/// - `CopilotDotcomPullRequests`: Metrics for GitHub.com pull request interactions
+
+/// Represents a complete set of GitHub Copilot metrics
+///
+/// This is the top-level structure that contains all metrics data
+/// retrieved from the GitHub API.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CopilotMetrics {
+    /// ISO date for these metrics (YYYY-MM-DD)
     pub date: String,
+
+    /// Total number of users who have activated Copilot
     pub total_active_users: Option<i64>,
+
+    /// Total number of users who have used Copilot
     pub total_engaged_users: Option<i64>,
+
+    /// Metrics related to code completions in IDEs
     pub copilot_ide_code_completions: Option<CopilotIdeCodeCompletions>,
+
+    /// Metrics related to chat in IDEs
     pub copilot_ide_chat: Option<CopilotIdeChat>,
+
+    /// Metrics related to chat on GitHub.com
     pub copilot_dotcom_chat: Option<CopilotDotcomChat>,
+
+    /// Metrics related to pull requests on GitHub.com
     pub copilot_dotcom_pull_requests: Option<CopilotDotcomPullRequests>,
 }
+
 // Generated Code by Github Copilot ends here

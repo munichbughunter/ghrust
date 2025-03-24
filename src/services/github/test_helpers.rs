@@ -1,3 +1,20 @@
+//! # GitHub Test Helpers
+//!
+//! This module provides helper functions for creating realistic test data for GitHub Copilot metrics.
+//! These functions are designed to simplify unit testing by generating pre-populated metrics objects
+//! with realistic values that mimic actual API responses.
+//!
+//! The module includes:
+//! - Functions for creating enterprise-level test metrics
+//! - Functions for creating team-level test metrics
+//! - Specialized metrics for testing chat-related functionality
+//! - Functions for simulating GitHub API responses
+//!
+//! These test helpers are particularly useful for:
+//! - Unit testing processors and services without calling the real GitHub API
+//! - Testing edge cases and various data scenarios
+//! - Ensuring consistent test data across test suites
+
 // Helper functions for tests that simplify test data creation
 use crate::models::github::{
     CopilotDotcomChat, CopilotDotcomPullRequests, CopilotIdeChat, CopilotIdeCodeCompletions,
@@ -7,6 +24,21 @@ use anyhow::Result;
 use chrono::Utc;
 
 /// Create test metrics suitable for enterprise testing
+///
+/// Generates a fully populated `CopilotMetrics` object with realistic values
+/// that represent enterprise-wide Copilot usage. This includes data for
+/// IDE code completions, IDE chat, GitHub.com chat, and pull request metrics.
+///
+/// # Returns
+///
+/// A `CopilotMetrics` instance with enterprise-scale values (e.g., 1000 active users)
+///
+/// # Example
+///
+/// ```
+/// let metrics = create_test_metrics();
+/// assert_eq!(metrics.total_active_users, Some(1000));
+/// ```
 pub fn create_test_metrics() -> CopilotMetrics {
     CopilotMetrics {
         date: "2023-03-01".to_string(),
@@ -72,6 +104,21 @@ pub fn create_test_metrics() -> CopilotMetrics {
 }
 
 /// Create test metrics suitable for team testing (smaller numbers)
+///
+/// Generates a fully populated `CopilotMetrics` object with realistic values
+/// that represent team-level Copilot usage. This includes data for all the same
+/// categories as enterprise metrics, but with lower numeric values to represent
+/// a team rather than an entire enterprise.
+///
+/// # Returns
+///
+/// A `CopilotMetrics` instance with team-scale values (e.g., 150 active users)
+///
+/// # Use Cases
+///
+/// - Testing team-specific metrics processors
+/// - Testing functions that need to handle smaller metric values
+/// - Comparing team vs enterprise metrics in the same test
 pub fn create_test_team_metrics() -> CopilotMetrics {
     CopilotMetrics {
         date: "2023-03-01".to_string(),
@@ -137,6 +184,23 @@ pub fn create_test_team_metrics() -> CopilotMetrics {
 }
 
 /// Create test metrics focused on IDE chat features for metrics calculation
+///
+/// Generates a specialized `CopilotMetrics` object that has detailed IDE chat metrics
+/// but minimal or no data for other metrics categories. This is particularly useful
+/// for testing chat-specific functionality without the noise of other metrics.
+///
+/// The metrics contain data for multiple editors (VS Code and IntelliJ) and
+/// multiple models (GPT-4 and GPT-3.5) to test complex aggregation logic.
+///
+/// # Returns
+///
+/// A `CopilotMetrics` instance with detailed IDE chat metrics but minimal other data
+///
+/// # Special Features
+///
+/// - Contains data from multiple editors (VS Code, IntelliJ)
+/// - Contains data from multiple models (GPT-3.5, GPT-4)
+/// - Has specific numeric values for testing chat metrics calculations
 pub fn create_chat_metrics() -> CopilotMetrics {
     CopilotMetrics {
         date: "2023-03-01".to_string(),
@@ -210,6 +274,26 @@ pub fn create_chat_metrics() -> CopilotMetrics {
 }
 
 /// Create a realistic API response with the current date
+///
+/// Generates a vector of metrics that mimics an actual GitHub API response,
+/// using the current date for the metrics. This is useful for testing code
+/// that expects to process fresh metrics data as it would come from the API.
+///
+/// # Returns
+///
+/// A `Result<Vec<CopilotMetrics>>` containing one metrics entry with today's date
+///
+/// # Features
+///
+/// - Uses the current date (from `Utc::now()`)
+/// - Simulates a successful API response
+/// - Contains a subset of metrics that might be returned by the API
+///
+/// # Use Cases
+///
+/// - Testing API response handlers
+/// - Testing date-sensitive functionality
+/// - Simulating successful API calls without mocking
 pub fn create_mock_api_response() -> Result<Vec<CopilotMetrics>> {
     let now = Utc::now();
     let date = now.format("%Y-%m-%d").to_string();
@@ -267,6 +351,28 @@ pub fn create_mock_api_response() -> Result<Vec<CopilotMetrics>> {
 }
 
 /// Create test metrics with specified active and engaged users
+///
+/// Generates a `CopilotMetrics` object with customized values for active and engaged users
+/// while keeping other metrics the same as the standard test metrics. This allows testing
+/// scenarios with specific user counts without manually creating entire metrics objects.
+///
+/// # Arguments
+///
+/// * `active_users` - Number of active users to set in the metrics
+/// * `engaged_users` - Number of engaged users to set in the metrics
+///
+/// # Returns
+///
+/// A `CopilotMetrics` instance with the specified user counts
+///
+/// # Example
+///
+/// ```
+/// Test a scenario with 500 active users but only 100 engaged users
+/// let metrics = create_test_metrics_with_params(500, 100);
+/// assert_eq!(metrics.total_active_users, Some(500));
+/// assert_eq!(metrics.total_engaged_users, Some(100));
+/// ```
 pub fn create_test_metrics_with_params(active_users: i64, engaged_users: i64) -> CopilotMetrics {
     let mut metrics = create_test_metrics();
     metrics.total_active_users = Some(active_users);

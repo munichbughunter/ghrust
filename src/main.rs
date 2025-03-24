@@ -1,3 +1,22 @@
+//! # GitHub Copilot Metrics Lambda
+//!
+//! This is the main entry point for the AWS Lambda function that collects
+//! GitHub Copilot metrics and reports them to Datadog.
+//!
+//! ## Workflow
+//! 1. Collects environment variables for configuration
+//! 2. Processes enterprise-wide Copilot metrics (if not skipped)
+//! 3. Processes team-specific Copilot metrics (if team slugs provided)
+//! 4. Reports all metrics to Datadog
+//!
+//! ## Environment Variables
+//! - `GITHUB_TOKEN`: Personal access token with admin:enterprise permissions
+//! - `GITHUB_ENTERPRISE_ID`: ID of the GitHub Enterprise organization
+//! - `GITHUB_TEAM_SLUGS`: Comma-separated list of team slugs (optional)
+//! - `DATADOG_API_KEY`: Datadog API key
+//! - `DATADOG_METRIC_NAMESPACE`: Namespace prefix for metrics (default: github.copilot)
+//! - `SKIP_ENTERPRISE_METRICS`: If set, skips enterprise metrics processing
+
 // Module declarations for project organization
 mod models; // Contains data structures for GitHub and Datadog
 mod processors; // Contains business logic for processing metrics
@@ -17,7 +36,17 @@ use crate::processors::enterprise;
 use crate::processors::team;
 
 /// Handler function for AWS Lambda
-/// This function is called for each Lambda invocation and orchestrates the metrics collection process
+///
+/// Processes GitHub Copilot metrics for an enterprise and/or specific teams
+/// and sends the metrics to Datadog.
+///
+/// # Arguments
+///
+/// * `_event` - Lambda event payload (not used in current implementation)
+///
+/// # Returns
+///
+/// * `Result<Value, Error>` - JSON response indicating success or failure
 async fn function_handler(_event: LambdaEvent<Value>) -> Result<Value, Error> {
     println!("Starting lambda function execution...");
 
@@ -112,8 +141,10 @@ async fn function_handler(_event: LambdaEvent<Value>) -> Result<Value, Error> {
     }))
 }
 
-/// Main entry point for the Lambda function
-/// Sets up tracing and the Lambda runtime service
+/// Initializes the Lambda runtime and starts the service
+///
+/// Sets up tracing for logging and starts the event loop to process
+/// Lambda invocations using the `function_handler`.
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     // Initialize tracing for better observability in AWS Lambda environment

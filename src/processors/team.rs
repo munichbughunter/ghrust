@@ -1,3 +1,15 @@
+//! # Team Metrics Processing
+//!
+//! This module handles the processing of GitHub Copilot metrics for specific teams
+//! within a GitHub Enterprise instance. It provides functionality to:
+//!
+//! - Fetch team-specific metrics from the GitHub API
+//! - Process the metrics data
+//! - Send the metrics to Datadog with team-specific namespace
+//!
+//! The module is designed to work with both individual teams and multiple teams
+//! in batch processing scenarios.
+
 use anyhow::{anyhow, Result};
 use tracing::{debug, info};
 
@@ -8,8 +20,26 @@ use crate::services::{
 
 /// Process team-specific metrics and send to Datadog
 ///
-/// This function fetches team-specific GitHub Copilot metrics,
-/// processes them, and sends them to Datadog.
+/// This function fetches GitHub Copilot metrics for a specific team within an enterprise,
+/// processes the data, and sends the metrics to Datadog with a team-specific namespace.
+///
+/// # Arguments
+///
+/// * `github_token` - GitHub personal access token with appropriate permissions
+/// * `enterprise_id` - ID of the GitHub Enterprise organization
+/// * `team_slug` - Slug identifier for the team (used in API paths and metrics namespacing)
+/// * `datadog_api_key` - Datadog API key for authentication
+/// * `datadog_namespace` - Base namespace prefix for Datadog metrics
+///
+/// # Returns
+///
+/// * `Result<()>` - Ok(()) if successful, or an error if any step fails
+///
+/// # Errors
+///
+/// Returns an error if:
+/// * Unable to fetch team metrics from GitHub
+/// * Sending metrics to Datadog fails
 pub fn process_team_metrics(
     github_token: &str,
     enterprise_id: &str,
@@ -65,7 +95,25 @@ pub fn process_team_metrics(
 
 /// Process metrics for multiple teams
 ///
-/// This function processes metrics for all teams provided in the list
+/// This function iterates through a list of team slugs and processes metrics for each team.
+/// It tracks the success and failure count, and returns an error if any team processing fails.
+///
+/// # Arguments
+///
+/// * `github_token` - GitHub personal access token with appropriate permissions
+/// * `enterprise_id` - ID of the GitHub Enterprise organization
+/// * `team_slugs` - Array of team slug identifiers to process
+/// * `datadog_api_key` - Datadog API key for authentication
+/// * `datadog_namespace` - Base namespace prefix for Datadog metrics
+///
+/// # Returns
+///
+/// * `Result<()>` - Ok(()) if all teams processed successfully, or an error if any team fails
+///
+/// # Errors
+///
+/// Returns an error if one or more teams could not be processed successfully,
+/// including the count of failed teams in the error message.
 pub fn process_all_teams(
     github_token: &str,
     enterprise_id: &str,
